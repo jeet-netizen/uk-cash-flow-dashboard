@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live UK Cash Flow Dashboard</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+    <!-- Custom Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-green': '#10b981',
+                        'secondary-blue': '#3b82f6',
+                        'danger-red': '#ef4444',
+                        'safe-green': '#10b981',
+                        'flow-in': '#10b981',
+                        'flow-out': '#ef4444',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Base styles */
+        body {
+            background-color: #f7f9fb;
+        }
+        .card {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        /* Chart specific styles to ensure responsiveness */
+        .chart-container {
+            position: relative;
+            height: 40vh;
+            width: 100%;
+        }
+
+        /* Responsive adjustments for KPI grid */
+        @media (max-width: 1024px) {
+            #kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .chart-container {
+                height: 50vh;
+            }
+        }
+        @media (max-width: 640px) {
+            #kpi-grid {
+                grid-template-columns: repeat(1, 1fr);
+            }
+        }
+    </style>
+</head>
+<body class="font-sans p-4 lg:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2 md:mb-0">UK Cash Flow Dashboard</h1>
+            <button id="refresh-button" class="bg-secondary-blue hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition duration-150 shadow-md flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m9.673 0H12v5m7.356 2A8.001 8.001 0 014.582 15m9.673 0H12v5"></path></svg>
+                Refresh Data (Simulated Live)
+            </button>
+        </header>
+
+        <!-- KPI Grid -->
+        <div id="kpi-grid" class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            <!-- KPI 1: Current Cash Balance -->
+            <div class="card bg-white p-5 rounded-xl border-t-4 border-secondary-blue">
+                <div class="flex items-center">
+                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Current Cash Balance</span>
+                </div>
+                <p id="kpi-balance" class="text-3xl font-extrabold mt-1 text-gray-900">£0</p>
+                <p class="text-sm text-gray-500 mt-1">Total cash across all accounts</p>
+            </div>
+
+            <!-- KPI 2: Net Operating Cash Flow (Last 30 Days) -->
+            <div class="card bg-white p-5 rounded-xl border-t-4 border-flow-in">
+                <div class="flex items-center">
+                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Net OCF (30 Days)</span>
+                </div>
+                <p id="kpi-net-ocf" class="text-3xl font-extrabold mt-1 text-gray-900">£0</p>
+                <p id="kpi-ocf-change" class="text-sm text-gray-500 mt-1">Operating activity only</p>
+            </div>
+
+            <!-- KPI 3: Cash Runway -->
+            <div class="card bg-white p-5 rounded-xl border-t-4 border-yellow-500">
+                <div class="flex items-center">
+                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Cash Runway</span>
+                </div>
+                <p id="kpi-runway" class="text-3xl font-extrabold mt-1 text-gray-900">0 Months</p>
+                <p class="text-sm text-gray-500 mt-1">Time until cash reserves depletion</p>
+            </div>
+
+             <!-- KPI 4: Days Sales Outstanding (DSO) -->
+            <div class="card bg-white p-5 rounded-xl border-t-4 border-flow-out">
+                <div class="flex items-center">
+                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Days Sales Outstanding (DSO)</span>
+                </div>
+                <p id="kpi-dso" class="text-3xl font-extrabold mt-1 text-gray-900">0 Days</p>
+                <p class="text-sm text-gray-500 mt-1">Avg. time to collect payments</p>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Chart 1: Monthly Cash Flow (Inflows vs. Outflows) -->
+            <div class="card bg-white p-6 rounded-xl">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Monthly Inflows vs. Outflows</h2>
+                <div class="chart-container">
+                    <canvas id="monthlyFlowChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Chart 2: Cumulative Cash Position -->
+            <div class="card bg-white p-6 rounded-xl">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Cumulative Cash Position Over Time</h2>
+                <div class="chart-container">
+                    <canvas id="cumulativeCashChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transactions Table (Mock) -->
+        <div class="card bg-white p-6 rounded-xl">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Recent Transactions (Last 7 Days)</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount (£)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transaction-list" class="bg-white divide-y divide-gray-200">
+                        <!-- Transactions will be inserted here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA AND INITIALIZATION ---
+
+        const currencySymbol = '£';
+        const dataLength = 6; // Number of months to display
+
+        // Initial Mock Data (You can replace this with your actual data structure)
+        const MOCK_FINANCIAL_DATA = [
+            // Month, Inflows, Outflows, DSO (Days Sales Outstanding)
+            { date: 'Jul 23', inflows: 85000, outflows: 72000, dso: 35 },
+            { date: 'Aug 23', inflows: 92000, outflows: 88000, dso: 32 },
+            { date: 'Sep 23', inflows: 110000, outflows: 95000, dso: 30 },
+            { date: 'Oct 23', inflows: 125000, outflows: 140000, dso: 41 },
+            { date: 'Nov 23', inflows: 100000, outflows: 75000, dso: 33 },
+            { date: 'Dec 23', inflows: 130000, outflows: 105000, dso: 28 }, // Current Month
+        ];
+
+        const MOCK_TRANSACTIONS = [
+            { date: '2023-12-07', description: 'Web Hosting Renewal', category: 'IT/Tech', amount: -250.00 },
+            { date: '2023-12-08', description: 'Client Invoice - Project Alpha', category: 'Sales', amount: 12500.00 },
+            { date: '2023-12-08', description: 'Staff Payroll Deposit', category: 'Personnel', amount: -8500.00 },
+            { date: '2023-12-09', description: 'Office Supplies (Rymans)', category: 'Admin', amount: -45.50 },
+            { date: '2023-12-10', description: 'Client Invoice - Project Beta', category: 'Sales', amount: 5500.00 },
+        ];
+
+        let flowChart, cumulativeChart;
+
+        // Utility function to format numbers as GBP currency
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('en-GB', {
+                style: 'currency',
+                currency: 'GBP',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(amount);
+        };
+
+        // Function to calculate all derived metrics
+        const calculateMetrics = (data) => {
+            let cumulativeCash = 20000; // Starting Balance before the data range (e.g., June's closing balance)
+            const processedData = data.map(item => {
+                const netCashFlow = item.inflows - item.outflows;
+                cumulativeCash += netCashFlow;
+                return {
+                    ...item,
+                    netCashFlow,
+                    cumulativeCash
+                };
+            });
+
+            // KPIs are based on the latest period (last item in processedData)
+            const latestData = processedData[processedData.length - 1];
+
+            // Calculate Cash Runway based on the last 3 months average cash flow
+            const lastThree = processedData.slice(-3);
+            const sumNetFlow = lastThree.reduce((sum, item) => sum + item.netCashFlow, 0);
+            const avgNetFlow = sumNetFlow / 3;
+
+            // Simple runway logic: if average net cash flow is negative (burning cash)
+            let runway = 'Infinite (Positive)'; // Default for positive average cash flow
+            if (avgNetFlow < 0) {
+                // If the business is burning cash, calculate how many months until reserves are zero
+                const months = Math.abs(latestData.cumulativeCash / avgNetFlow);
+                runway = `${Math.floor(months)} Months`;
+
+                // If less than 1 month, show in days
+                if (months < 1) {
+                    runway = `${Math.floor(months * 30)} Days`;
+                }
+            } else if (latestData.cumulativeCash <= 0) {
+                runway = 'CRITICAL (0 Days)';
+            }
+
+
+            return {
+                processedData,
+                latest: latestData,
+                totalBalance: latestData.cumulativeCash,
+                netOCF: latestData.netCashFlow,
+                runway: runway,
+                avgDSO: latestData.dso
+            };
+        };
+
+        // --- RENDER FUNCTIONS ---
+
+        const updateKPIs = (metrics) => {
+            const { totalBalance, netOCF, runway, avgDSO } = metrics;
+
+            document.getElementById('kpi-balance').textContent = formatCurrency(totalBalance);
+
+            // Net OCF coloring
+            const ocfElement = document.getElementById('kpi-net-ocf');
+            const ocfChangeElement = document.getElementById('kpi-ocf-change');
+            ocfElement.textContent = formatCurrency(Math.abs(netOCF));
+            ocfElement.classList.remove('text-safe-green', 'text-danger-red');
+
+            if (netOCF >= 0) {
+                ocfElement.classList.add('text-safe-green');
+                ocfChangeElement.textContent = 'Cash Surplus';
+                ocfChangeElement.classList.remove('text-danger-red');
+                ocfChangeElement.classList.add('text-safe-green');
+            } else {
+                ocfElement.classList.add('text-danger-red');
+                ocfChangeElement.textContent = 'Cash Deficit';
+                ocfChangeElement.classList.remove('text-safe-green');
+                ocfChangeElement.classList.add('text-danger-red');
+            }
+
+            // Runway coloring
+            const runwayElement = document.getElementById('kpi-runway');
+            runwayElement.textContent = runway;
+            runwayElement.classList.remove('text-safe-green', 'text-danger-red', 'text-yellow-500');
+            if (runway.includes('Infinite')) {
+                runwayElement.classList.add('text-safe-green');
+            } else if (runway.includes('CRITICAL') || (parseInt(runway) < 3 && !isNaN(parseInt(runway)))) {
+                runwayElement.classList.add('text-danger-red');
+            } else {
+                runwayElement.classList.add('text-yellow-500');
+            }
+
+            // DSO coloring (UK best practice is often < 30 days)
+            const dsoElement = document.getElementById('kpi-dso');
+            dsoElement.textContent = `${avgDSO} Days`;
+            dsoElement.classList.remove('text-safe-green', 'text-danger-red', 'text-yellow-500');
+
+            if (avgDSO <= 30) {
+                dsoElement.classList.add('text-safe-green');
+            } else if (avgDSO > 45) {
+                dsoElement.classList.add('text-danger-red');
+            } else {
+                dsoElement.classList.add('text-yellow-500');
+            }
+        };
+
+        const renderCharts = (data) => {
+            const labels = data.map(d => d.date);
+            const inflows = data.map(d => d.inflows);
+            const outflows = data.map(d => d.outflows);
+            const cumulative = data.map(d => d.cumulativeCash);
+
+            const monthlyCtx = document.getElementById('monthlyFlowChart').getContext('2d');
+            const cumulativeCtx = document.getElementById('cumulativeCashChart').getContext('2d');
+
+            // Destroy existing charts if they exist to prevent memory leaks/overlap
+            if (flowChart) flowChart.destroy();
+            if (cumulativeChart) cumulativeChart.destroy();
+
+            // Chart 1: Monthly Cash Flow
+            flowChart = new Chart(monthlyCtx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Inflows (£)',
+                            data: inflows,
+                            backgroundColor: 'rgb(16, 185, 129, 0.8)', // flow-in
+                            borderRadius: 6,
+                        },
+                        {
+                            label: 'Outflows (£)',
+                            data: outflows,
+                            backgroundColor: 'rgb(239, 68, 68, 0.8)', // flow-out
+                            borderRadius: 6,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top' },
+                        title: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            grid: { drawBorder: false },
+                            ticks: { callback: (value) => formatCurrency(value) }
+                        }
+                    }
+                }
+            });
+
+            // Chart 2: Cumulative Cash Position
+            cumulativeChart = new Chart(cumulativeCtx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Cumulative Cash (£)',
+                        data: cumulative,
+                        borderColor: 'rgb(59, 130, 246)', // secondary-blue
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        title: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            grid: { drawBorder: false },
+                            ticks: { callback: (value) => formatCurrency(value) }
+                        }
+                    }
+                }
+            });
+        };
+
+        const renderTransactions = (transactions) => {
+            const list = document.getElementById('transaction-list');
+            list.innerHTML = '';
+
+            transactions.forEach(tx => {
+                const isDebit = tx.amount < 0;
+                const amountClass = isDebit ? 'text-flow-out' : 'text-flow-in';
+                const formattedAmount = formatCurrency(tx.amount);
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${tx.date}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${tx.description}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">${tx.category}</span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${amountClass}">${formattedAmount}</td>
+                `;
+                list.appendChild(row);
+            });
+        };
+
+        // --- MAIN LOGIC ---
+
+        const initializeDashboard = (financialData, transactionData) => {
+            // 1. Calculate and derive all necessary metrics
+            const metrics = calculateMetrics(financialData);
+
+            // 2. Update KPI Cards
+            updateKPIs(metrics);
+
+            // 3. Render Charts
+            renderCharts(metrics.processedData);
+
+            // 4. Render Transaction List
+            renderTransactions(transactionData);
+
+            console.log('Dashboard initialized with mock data.');
+        };
+
+        // Simulation of "Live" Data Fetching
+        const refreshData = () => {
+            console.log('Simulating fetching live data...');
+
+            // In a real app, this would be an async fetch() call to a server endpoint:
+            // const newFinancialData = await fetch('your-api/cash-flow').then(res => res.json());
+
+            // --- SIMULATED DATA CHANGES FOR DEMO ---
+            // To make the "refresh" feel dynamic, slightly adjust the last month's data.
+            const updatedData = [...MOCK_FINANCIAL_DATA];
+            const lastIndex = updatedData.length - 1;
+
+            // Simulate a slightly better/worse month
+            updatedData[lastIndex].inflows = updatedData[lastIndex].inflows + (Math.random() > 0.5 ? 5000 : -5000);
+            updatedData[lastIndex].outflows = updatedData[lastIndex].outflows + (Math.random() > 0.5 ? 2000 : -2000);
+
+            // Simulate a new transaction
+            const newTransaction = {
+                date: new Date().toISOString().slice(0, 10),
+                description: 'VAT Payment (Simulated)',
+                category: 'Taxes',
+                amount: -15000 * Math.random(),
+            };
+            const updatedTransactions = [newTransaction, ...MOCK_TRANSACTIONS.slice(0, 4)];
+            // --- END SIMULATED DATA CHANGES ---
+
+            // Re-initialize the dashboard with the (simulated) fresh data
+            initializeDashboard(updatedData, updatedTransactions);
+            
+            // Add a small visual confirmation
+            document.getElementById('refresh-button').textContent = 'Data Refreshed!';
+            setTimeout(() => {
+                document.getElementById('refresh-button').innerHTML = `
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m9.673 0H12v5m7.356 2A8.001 8.001 0 014.582 15m9.673 0H12v5"></path></svg>
+                    Refresh Data (Simulated Live)
+                `;
+            }, 1500);
+        };
+
+        // Attach event listener to the refresh button
+        document.getElementById('refresh-button').addEventListener('click', refreshData);
+
+        // Run the dashboard initialization when the window loads
+        window.onload = () => {
+            initializeDashboard(MOCK_FINANCIAL_DATA, MOCK_TRANSACTIONS);
+        };
+
+    </script>
+</body>
+</html>
