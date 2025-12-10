@@ -82,10 +82,10 @@
                 <p class="text-sm text-gray-500 mt-1">Total cash across all accounts</p>
             </div>
 
-            <!-- KPI 2: Net Operating Cash Flow (Last 30 Days) -->
+            <!-- KPI 2: Net Operating Cash Flow (Last Month) -->
             <div class="card bg-white p-5 rounded-xl border-t-4 border-flow-in">
                 <div class="flex items-center">
-                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Net OCF (30 Days)</span>
+                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Net OCF (Last Month)</span>
                 </div>
                 <p id="kpi-net-ocf" class="text-3xl font-extrabold mt-1 text-gray-900">£0</p>
                 <p id="kpi-ocf-change" class="text-sm text-gray-500 mt-1">Operating activity only</p>
@@ -128,6 +128,20 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Data Uploader Section -->
+        <div class="card bg-white p-6 rounded-xl mb-8 border-l-4 border-primary-green">
+            <h2 class="text-xl font-semibold text-gray-800 mb-2">Upload Cash Transactions (CSV)</h2>
+            <p class="text-sm text-gray-600 mb-4">Upload a CSV file with the headers: <code class="bg-gray-100 p-1 rounded">Date,Description,Category,Amount</code></p>
+            <input type="file" id="csvFileInput" accept=".csv" class="w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-sm file:font-semibold
+                file:bg-secondary-blue/10 file:text-secondary-blue
+                hover:file:bg-secondary-blue/20
+            ">
+            <p id="upload-status" class="text-sm mt-2 text-gray-700"></p>
+        </div>
 
         <!-- Transactions Table (Mock) -->
         <div class="card bg-white p-6 rounded-xl">
@@ -152,29 +166,36 @@
 
     <script>
         // --- DATA AND INITIALIZATION ---
-
         const currencySymbol = '£';
-        const dataLength = 6; // Number of months to display
 
-        // Initial Mock Data (You can replace this with your actual data structure)
-        const MOCK_FINANCIAL_DATA = [
+        // Extended INITIAL_TRANSACTIONS data (sorted by date for cumulative calculation)
+        const INITIAL_TRANSACTIONS = [
             // Month, Inflows, Outflows, DSO (Days Sales Outstanding)
-            { date: 'Jul 23', inflows: 85000, outflows: 72000, dso: 35 },
-            { date: 'Aug 23', inflows: 92000, outflows: 88000, dso: 32 },
-            { date: 'Sep 23', inflows: 110000, outflows: 95000, dso: 30 },
-            { date: 'Oct 23', inflows: 125000, outflows: 140000, dso: 41 },
-            { date: 'Nov 23', inflows: 100000, outflows: 75000, dso: 33 },
-            { date: 'Dec 23', inflows: 130000, outflows: 105000, dso: 28 }, // Current Month
-        ];
+            { date: '2023-07-01', description: 'July Sales Collections', category: 'Operating', amount: 85000.00, isDSO: true },
+            { date: '2023-07-31', description: 'July Operational Costs', category: 'Operating', amount: -72000.00 },
 
-        const MOCK_TRANSACTIONS = [
+            { date: '2023-08-01', description: 'August Sales Collections', category: 'Operating', amount: 92000.00, isDSO: true },
+            { date: '2023-08-15', description: 'August Payroll', category: 'Operating', amount: -88000.00 },
+
+            { date: '2023-09-05', description: 'New Loan Drawdown', category: 'Financing', amount: 15000.00 },
+            { date: '2023-09-08', description: 'September Sales Collections', category: 'Operating', amount: 110000.00, isDSO: true },
+            { date: '2023-09-30', description: 'September Costs', category: 'Operating', amount: -95000.00 },
+
+            { date: '2023-10-10', description: 'October Sales Collections', category: 'Operating', amount: 125000.00, isDSO: true },
+            { date: '2023-10-25', description: 'Tax Payment & Large CapEx', category: 'Investing', amount: -140000.00 }, // Large outflow
+
+            { date: '2023-11-01', description: 'November Sales Collections', category: 'Operating', amount: 100000.00, isDSO: true },
+            { date: '2023-11-15', description: 'November Costs', category: 'Operating', amount: -75000.00 },
+            
+            // Recent Transactions (Dec 23)
             { date: '2023-12-07', description: 'Web Hosting Renewal', category: 'IT/Tech', amount: -250.00 },
-            { date: '2023-12-08', description: 'Client Invoice - Project Alpha', category: 'Sales', amount: 12500.00 },
+            { date: '2023-12-08', description: 'Client Invoice - Project Alpha', category: 'Sales', amount: 12500.00, isDSO: true },
             { date: '2023-12-08', description: 'Staff Payroll Deposit', category: 'Personnel', amount: -8500.00 },
             { date: '2023-12-09', description: 'Office Supplies (Rymans)', category: 'Admin', amount: -45.50 },
-            { date: '2023-12-10', description: 'Client Invoice - Project Beta', category: 'Sales', amount: 5500.00 },
-        ];
+            { date: '2023-12-10', description: 'Client Invoice - Project Beta', category: 'Sales', amount: 5500.00, isDSO: true },
+        ].sort((a, b) => new Date(a.date) - new Date(b.date)); // Ensure sorting for cumulative cash calculation
 
+        let currentTransactions = [...INITIAL_TRANSACTIONS];
         let flowChart, cumulativeChart;
 
         // Utility function to format numbers as GBP currency
@@ -187,42 +208,90 @@
             }).format(amount);
         };
 
-        // Function to calculate all derived metrics
-        const calculateMetrics = (data) => {
-            let cumulativeCash = 20000; // Starting Balance before the data range (e.g., June's closing balance)
-            const processedData = data.map(item => {
+        // Utility to get YYYY-MM key
+        const getMonthKey = (dateString) => {
+            const date = new Date(dateString);
+            return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+        };
+        
+        // --- DATA PROCESSING LOGIC ---
+
+        const aggregateTransactions = (transactions) => {
+            if (transactions.length === 0) {
+                 return { processedData: [], latestDSO: 0, runway: 'CRITICAL (No Data)', totalBalance: 0 };
+            }
+            
+            const monthlyAggregates = {};
+            let cumulativeCash = 50000; // Realistic starting balance for Jan 1
+            let totalInflows = 0;
+            let dsoInflows = 0;
+            let dsoCount = 0;
+
+            // 1. Process all transactions to calculate monthly flows
+            transactions.forEach(tx => {
+                const dateKey = getMonthKey(tx.date);
+                const amount = parseFloat(tx.amount);
+
+                if (!monthlyAggregates[dateKey]) {
+                    monthlyAggregates[dateKey] = { inflows: 0, outflows: 0, date: tx.date };
+                }
+
+                if (amount >= 0) {
+                    monthlyAggregates[dateKey].inflows += amount;
+                    totalInflows += amount;
+                } else {
+                    monthlyAggregates[dateKey].outflows += Math.abs(amount);
+                }
+
+                // Simple DSO calculation assumption based on mocked 'isDSO' property
+                // In a real system, DSO requires tracking invoice dates and payment dates
+                if (tx.isDSO) {
+                    // For a proper demo, let's just use a fixed mock value for DSO
+                    dsoInflows += 1; // Count of Sales Inflow transactions
+                    dsoCount += 35; // Mock average days, to be replaced by actual logic
+                }
+            });
+
+            // 2. Build the final processed array and calculate cumulative figures
+            const sortedKeys = Object.keys(monthlyAggregates).sort();
+            const processedData = sortedKeys.map(key => {
+                const item = monthlyAggregates[key];
                 const netCashFlow = item.inflows - item.outflows;
                 cumulativeCash += netCashFlow;
+                
                 return {
-                    ...item,
-                    netCashFlow,
-                    cumulativeCash
+                    date: new Date(item.date).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
+                    inflows: item.inflows,
+                    outflows: item.outflows,
+                    netCashFlow: netCashFlow,
+                    cumulativeCash: cumulativeCash
                 };
             });
 
-            // KPIs are based on the latest period (last item in processedData)
-            const latestData = processedData[processedData.length - 1];
+            // 3. Calculate KPIs based on the final month's data
+            const latestData = processedData[processedData.length - 1] || { cumulativeCash: 0, netCashFlow: 0 };
 
             // Calculate Cash Runway based on the last 3 months average cash flow
-            const lastThree = processedData.slice(-3);
-            const sumNetFlow = lastThree.reduce((sum, item) => sum + item.netCashFlow, 0);
-            const avgNetFlow = sumNetFlow / 3;
-
-            // Simple runway logic: if average net cash flow is negative (burning cash)
-            let runway = 'Infinite (Positive)'; // Default for positive average cash flow
-            if (avgNetFlow < 0) {
-                // If the business is burning cash, calculate how many months until reserves are zero
-                const months = Math.abs(latestData.cumulativeCash / avgNetFlow);
-                runway = `${Math.floor(months)} Months`;
-
-                // If less than 1 month, show in days
-                if (months < 1) {
-                    runway = `${Math.floor(months * 30)} Days`;
+            const lookback = 3;
+            const lastMonths = processedData.slice(-lookback);
+            const sumNetFlow = lastMonths.reduce((sum, item) => sum + item.netCashFlow, 0);
+            const avgNetFlow = sumNetFlow / lookback;
+            
+            let runway = 'Infinite (Positive)';
+            if (latestData.cumulativeCash > 0) {
+                 if (avgNetFlow < 0) {
+                    const months = Math.abs(latestData.cumulativeCash / avgNetFlow);
+                    runway = `${Math.floor(months)} Months`;
+                    if (months < 1) {
+                        runway = `${Math.floor(months * 30)} Days`;
+                    }
                 }
-            } else if (latestData.cumulativeCash <= 0) {
+            } else {
                 runway = 'CRITICAL (0 Days)';
             }
-
+            
+            // Mock DSO calculation (since transaction list doesn't contain AR aging)
+            const latestDSO = dsoCount > 0 ? Math.round(dsoCount / dsoInflows) : 35; // Default mock 35 days
 
             return {
                 processedData,
@@ -230,8 +299,46 @@
                 totalBalance: latestData.cumulativeCash,
                 netOCF: latestData.netCashFlow,
                 runway: runway,
-                avgDSO: latestData.dso
+                avgDSO: latestDSO
             };
+        };
+
+        const parseCSV = (csvText) => {
+            const transactions = [];
+            const lines = csvText.split('\n').filter(line => line.trim() !== '');
+            
+            if (lines.length <= 1) {
+                return { success: false, message: "CSV file is empty or missing data." };
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const expectedHeaders = ['Date', 'Description', 'Category', 'Amount'];
+            
+            if (headers.length !== expectedHeaders.length || headers.some((h, i) => h !== expectedHeaders[i])) {
+                return { success: false, message: `Invalid CSV format. Expected headers: ${expectedHeaders.join(', ')}` };
+            }
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',').map(v => v.trim());
+                if (values.length === headers.length) {
+                    const amount = parseFloat(values[3]);
+                    const date = values[0];
+                    if (isNaN(amount) || isNaN(new Date(date))) {
+                        return { success: false, message: `Error on line ${i + 1}: Invalid Date or Amount value.` };
+                    }
+                    
+                    transactions.push({
+                        date: date,
+                        description: values[1],
+                        category: values[2],
+                        amount: amount,
+                        isDSO: values[2] === 'Sales' || values[2] === 'Operating' && amount > 0, // Flag potential DSO items
+                    });
+                }
+            }
+            // Sort by date before returning
+            transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+            return { success: true, data: transactions, message: `Successfully loaded ${transactions.length} transactions.` };
         };
 
         // --- RENDER FUNCTIONS ---
@@ -372,8 +479,18 @@
         const renderTransactions = (transactions) => {
             const list = document.getElementById('transaction-list');
             list.innerHTML = '';
+            
+            // Filter to show only the latest 5 transactions
+            const recentTransactions = transactions.slice(-5).reverse();
 
-            transactions.forEach(tx => {
+            if (recentTransactions.length === 0) {
+                 const row = document.createElement('tr');
+                 row.innerHTML = `<td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No recent transactions found.</td>`;
+                 list.appendChild(row);
+                 return;
+            }
+
+            recentTransactions.forEach(tx => {
                 const isDebit = tx.amount < 0;
                 const amountClass = isDebit ? 'text-flow-out' : 'text-flow-in';
                 const formattedAmount = formatCurrency(tx.amount);
@@ -391,11 +508,48 @@
             });
         };
 
-        // --- MAIN LOGIC ---
+        // --- HANDLERS AND MAIN LOGIC ---
+        
+        const updateStatus = (message, isError = false) => {
+            const statusElement = document.getElementById('upload-status');
+            statusElement.textContent = message;
+            statusElement.className = `text-sm mt-2 font-medium ${isError ? 'text-danger-red' : 'text-flow-in'}`;
+        }
 
-        const initializeDashboard = (financialData, transactionData) => {
+        const handleFileUpload = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            updateStatus("Processing file...", false);
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const csvText = e.target.result;
+                const parseResult = parseCSV(csvText);
+
+                if (parseResult.success) {
+                    currentTransactions = parseResult.data;
+                    initializeDashboard(currentTransactions);
+                    updateStatus(parseResult.message, false);
+                } else {
+                    updateStatus(`Error: ${parseResult.message}`, true);
+                }
+            };
+            reader.onerror = () => {
+                updateStatus("Error reading file.", true);
+            };
+            reader.readAsText(file);
+        };
+
+        const initializeDashboard = (transactions) => {
+            if (transactions.length === 0) {
+                 updateStatus("Dashboard requires data. Please upload a valid CSV file.", true);
+                 // Reset KPIs and Charts if no data
+                 return;
+            }
+            
             // 1. Calculate and derive all necessary metrics
-            const metrics = calculateMetrics(financialData);
+            const metrics = aggregateTransactions(transactions);
 
             // 2. Update KPI Cards
             updateKPIs(metrics);
@@ -404,39 +558,31 @@
             renderCharts(metrics.processedData);
 
             // 4. Render Transaction List
-            renderTransactions(transactionData);
+            renderTransactions(transactions);
 
-            console.log('Dashboard initialized with mock data.');
+            console.log('Dashboard initialized with new data.');
         };
 
-        // Simulation of "Live" Data Fetching
+        // Simulation of "Live" Data Refresh (pushes small new mock transaction)
         const refreshData = () => {
             console.log('Simulating fetching live data...');
-
-            // In a real app, this would be an async fetch() call to a server endpoint:
-            // const newFinancialData = await fetch('your-api/cash-flow').then(res => res.json());
-
-            // --- SIMULATED DATA CHANGES FOR DEMO ---
-            // To make the "refresh" feel dynamic, slightly adjust the last month's data.
-            const updatedData = [...MOCK_FINANCIAL_DATA];
-            const lastIndex = updatedData.length - 1;
-
-            // Simulate a slightly better/worse month
-            updatedData[lastIndex].inflows = updatedData[lastIndex].inflows + (Math.random() > 0.5 ? 5000 : -5000);
-            updatedData[lastIndex].outflows = updatedData[lastIndex].outflows + (Math.random() > 0.5 ? 2000 : -2000);
 
             // Simulate a new transaction
             const newTransaction = {
                 date: new Date().toISOString().slice(0, 10),
-                description: 'VAT Payment (Simulated)',
-                category: 'Taxes',
-                amount: -15000 * Math.random(),
+                description: 'Utility Bill (Simulated)',
+                category: 'Operating',
+                amount: -(1000 * Math.random()),
+                isDSO: false
             };
-            const updatedTransactions = [newTransaction, ...MOCK_TRANSACTIONS.slice(0, 4)];
-            // --- END SIMULATED DATA CHANGES ---
+            
+            // Add new transaction to the current data set
+            currentTransactions.push(newTransaction);
+            currentTransactions.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-            // Re-initialize the dashboard with the (simulated) fresh data
-            initializeDashboard(updatedData, updatedTransactions);
+
+            // Re-initialize the dashboard with the updated data
+            initializeDashboard(currentTransactions);
             
             // Add a small visual confirmation
             document.getElementById('refresh-button').textContent = 'Data Refreshed!';
@@ -448,12 +594,14 @@
             }, 1500);
         };
 
-        // Attach event listener to the refresh button
+        // Attach event listeners
         document.getElementById('refresh-button').addEventListener('click', refreshData);
+        document.getElementById('csvFileInput').addEventListener('change', handleFileUpload);
 
         // Run the dashboard initialization when the window loads
         window.onload = () => {
-            initializeDashboard(MOCK_FINANCIAL_DATA, MOCK_TRANSACTIONS);
+            initializeDashboard(INITIAL_TRANSACTIONS);
+            updateStatus("Dashboard loaded with initial mock data. Upload a file to update.", false);
         };
 
     </script>
