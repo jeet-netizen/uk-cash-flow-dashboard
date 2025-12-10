@@ -73,13 +73,13 @@
 
         <!-- KPI Grid -->
         <div id="kpi-grid" class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
-            <!-- KPI 1: Current Cash Balance -->
+            <!-- KPI 1: Current Cash Balance (Now derived from Running Balance) -->
             <div class="card bg-white p-5 rounded-xl border-t-4 border-secondary-blue">
                 <div class="flex items-center">
                     <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Current Cash Balance</span>
                 </div>
                 <p id="kpi-balance" class="text-3xl font-extrabold mt-1 text-gray-900">£0</p>
-                <p class="text-sm text-gray-500 mt-1">Total cash across all accounts</p>
+                <p class="text-sm text-gray-500 mt-1">Closing balance from transactions</p>
             </div>
 
             <!-- KPI 2: Net Operating Cash Flow (Last Month) -->
@@ -91,22 +91,22 @@
                 <p id="kpi-ocf-change" class="text-sm text-gray-500 mt-1">Operating activity only</p>
             </div>
 
-            <!-- KPI 3: Cash Runway -->
+            <!-- KPI 3: Average Monthly Inflow (Replaced Cash Runway) -->
             <div class="card bg-white p-5 rounded-xl border-t-4 border-yellow-500">
                 <div class="flex items-center">
-                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Cash Runway</span>
+                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Average Monthly Inflow</span>
                 </div>
-                <p id="kpi-runway" class="text-3xl font-extrabold mt-1 text-gray-900">0 Months</p>
-                <p class="text-sm text-gray-500 mt-1">Time until cash reserves depletion</p>
+                <p id="kpi-avg-inflow" class="text-3xl font-extrabold mt-1 text-gray-900">£0</p>
+                <p class="text-sm text-gray-500 mt-1">Avg. cash received per month</p>
             </div>
 
-             <!-- KPI 4: Days Sales Outstanding (DSO) -->
+             <!-- KPI 4: Average Monthly Spend (Replaced DSO) -->
             <div class="card bg-white p-5 rounded-xl border-t-4 border-flow-out">
                 <div class="flex items-center">
-                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Days Sales Outstanding (DSO)</span>
+                    <span class="text-xs font-semibold uppercase text-gray-500 tracking-wider">Average Monthly Spend</span>
                 </div>
-                <p id="kpi-dso" class="text-3xl font-extrabold mt-1 text-gray-900">0 Days</p>
-                <p class="text-sm text-gray-500 mt-1">Avg. time to collect payments</p>
+                <p id="kpi-avg-spend" class="text-3xl font-extrabold mt-1 text-gray-900">£0</p>
+                <p class="text-sm text-gray-500 mt-1">Avg. cash spent per month</p>
             </div>
         </div>
 
@@ -132,7 +132,7 @@
         <!-- Data Uploader Section -->
         <div class="card bg-white p-6 rounded-xl mb-8 border-l-4 border-primary-green">
             <h2 class="text-xl font-semibold text-gray-800 mb-2">Upload Cash Transactions (CSV)</h2>
-            <p class="text-sm text-gray-600 mb-4">Upload a CSV file with the headers: <code class="bg-gray-100 p-1 rounded">Date,Description,Category,Amount</code></p>
+            <p class="text-sm text-gray-600 mb-4">Upload a CSV file with the headers: <code class="bg-gray-100 p-1 rounded">Date,Description,Category,Amount,Running Balance</code></p>
             <input type="file" id="csvFileInput" accept=".csv" class="w-full text-sm text-gray-500
                 file:mr-4 file:py-2 file:px-4
                 file:rounded-full file:border-0
@@ -143,9 +143,9 @@
             <p id="upload-status" class="text-sm mt-2 text-gray-700"></p>
         </div>
 
-        <!-- Transactions Table (Mock) -->
+        <!-- Transactions Table (Updated to Top 7 by Magnitude) -->
         <div class="card bg-white p-6 rounded-xl">
-            <h2 class="text-xl font-semibold text-gray-800 mb-4">Recent Transactions (Last 7 Days)</h2>
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Top 7 Transactions (by Magnitude)</h2>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
@@ -168,32 +168,28 @@
         // --- DATA AND INITIALIZATION ---
         const currencySymbol = '£';
 
-        // Extended INITIAL_TRANSACTIONS data (sorted by date for cumulative calculation)
+        // Updated MOCK Data Structure including Running Balance
         const INITIAL_TRANSACTIONS = [
-            // Month, Inflows, Outflows, DSO (Days Sales Outstanding)
-            { date: '2023-07-01', description: 'July Sales Collections', category: 'Operating', amount: 85000.00, isDSO: true },
-            { date: '2023-07-31', description: 'July Operational Costs', category: 'Operating', amount: -72000.00 },
-
-            { date: '2023-08-01', description: 'August Sales Collections', category: 'Operating', amount: 92000.00, isDSO: true },
-            { date: '2023-08-15', description: 'August Payroll', category: 'Operating', amount: -88000.00 },
-
-            { date: '2023-09-05', description: 'New Loan Drawdown', category: 'Financing', amount: 15000.00 },
-            { date: '2023-09-08', description: 'September Sales Collections', category: 'Operating', amount: 110000.00, isDSO: true },
-            { date: '2023-09-30', description: 'September Costs', category: 'Operating', amount: -95000.00 },
-
-            { date: '2023-10-10', description: 'October Sales Collections', category: 'Operating', amount: 125000.00, isDSO: true },
-            { date: '2023-10-25', description: 'Tax Payment & Large CapEx', category: 'Investing', amount: -140000.00 }, // Large outflow
-
-            { date: '2023-11-01', description: 'November Sales Collections', category: 'Operating', amount: 100000.00, isDSO: true },
-            { date: '2023-11-15', description: 'November Costs', category: 'Operating', amount: -75000.00 },
-            
+            // Date, Description, Category, Amount, Running Balance
+            { date: '2023-07-01', description: 'Initial Capital Injection', category: 'Financing', amount: 50000.00, runningBalance: 50000.00 },
+            { date: '2023-07-15', description: 'July Sales Collections', category: 'Operating', amount: 85000.00, runningBalance: 135000.00 },
+            { date: '2023-07-31', description: 'July Operational Costs', category: 'Operating', amount: -72000.00, runningBalance: 63000.00 },
+            { date: '2023-08-01', description: 'August Sales Collections', category: 'Operating', amount: 92000.00, runningBalance: 155000.00 },
+            { date: '2023-08-15', description: 'August Payroll', category: 'Operating', amount: -88000.00, runningBalance: 67000.00 },
+            { date: '2023-09-05', description: 'New Loan Drawdown', category: 'Financing', amount: 15000.00, runningBalance: 82000.00 },
+            { date: '2023-09-08', description: 'September Sales Collections', category: 'Operating', amount: 110000.00, runningBalance: 192000.00 },
+            { date: '2023-09-30', description: 'September Costs', category: 'Operating', amount: -95000.00, runningBalance: 97000.00 },
+            { date: '2023-10-10', description: 'October Sales Collections', category: 'Operating', amount: 125000.00, runningBalance: 222000.00 },
+            { date: '2023-10-25', description: 'Large Equipment Purchase', category: 'Investing', amount: -140000.00, runningBalance: 82000.00 }, // Large outflow
+            { date: '2023-11-01', description: 'November Sales Collections', category: 'Operating', amount: 100000.00, runningBalance: 182000.00 },
+            { date: '2023-11-15', description: 'November Costs', category: 'Operating', amount: -75000.00, runningBalance: 107000.00 },
             // Recent Transactions (Dec 23)
-            { date: '2023-12-07', description: 'Web Hosting Renewal', category: 'IT/Tech', amount: -250.00 },
-            { date: '2023-12-08', description: 'Client Invoice - Project Alpha', category: 'Sales', amount: 12500.00, isDSO: true },
-            { date: '2023-12-08', description: 'Staff Payroll Deposit', category: 'Personnel', amount: -8500.00 },
-            { date: '2023-12-09', description: 'Office Supplies (Rymans)', category: 'Admin', amount: -45.50 },
-            { date: '2023-12-10', description: 'Client Invoice - Project Beta', category: 'Sales', amount: 5500.00, isDSO: true },
-        ].sort((a, b) => new Date(a.date) - new Date(b.date)); // Ensure sorting for cumulative cash calculation
+            { date: '2023-12-07', description: 'Web Hosting Renewal', category: 'IT/Tech', amount: -250.00, runningBalance: 106750.00 },
+            { date: '2023-12-08', description: 'Client Invoice - Project Alpha', category: 'Sales', amount: 12500.00, runningBalance: 119250.00 },
+            { date: '2023-12-08', description: 'Staff Payroll Deposit', category: 'Personnel', amount: -8500.00, runningBalance: 110750.00 },
+            { date: '2023-12-09', description: 'Office Supplies (Rymans)', category: 'Admin', amount: -45.50, runningBalance: 110704.50 },
+            { date: '2023-12-10', description: 'Client Invoice - Project Beta', category: 'Sales', amount: 5500.00, runningBalance: 116204.50 },
+        ].sort((a, b) => new Date(a.date) - new Date(b.date)); 
 
         let currentTransactions = [...INITIAL_TRANSACTIONS];
         let flowChart, cumulativeChart;
@@ -218,14 +214,12 @@
 
         const aggregateTransactions = (transactions) => {
             if (transactions.length === 0) {
-                 return { processedData: [], latestDSO: 0, runway: 'CRITICAL (No Data)', totalBalance: 0 };
+                 return { processedData: [], totalBalance: 0, netOCF: 0, avgInflow: 0, avgOutflow: 0 };
             }
             
             const monthlyAggregates = {};
-            let cumulativeCash = 50000; // Realistic starting balance for Jan 1
             let totalInflows = 0;
-            let dsoInflows = 0;
-            let dsoCount = 0;
+            let totalOutflows = 0;
 
             // 1. Process all transactions to calculate monthly flows
             transactions.forEach(tx => {
@@ -233,6 +227,7 @@
                 const amount = parseFloat(tx.amount);
 
                 if (!monthlyAggregates[dateKey]) {
+                    // Store the first date in the month for labeling
                     monthlyAggregates[dateKey] = { inflows: 0, outflows: 0, date: tx.date };
                 }
 
@@ -241,65 +236,42 @@
                     totalInflows += amount;
                 } else {
                     monthlyAggregates[dateKey].outflows += Math.abs(amount);
-                }
-
-                // Simple DSO calculation assumption based on mocked 'isDSO' property
-                // In a real system, DSO requires tracking invoice dates and payment dates
-                if (tx.isDSO) {
-                    // For a proper demo, let's just use a fixed mock value for DSO
-                    dsoInflows += 1; // Count of Sales Inflow transactions
-                    dsoCount += 35; // Mock average days, to be replaced by actual logic
+                    totalOutflows += Math.abs(amount);
                 }
             });
 
-            // 2. Build the final processed array and calculate cumulative figures
+            // 2. Build the final processed array and calculate cumulative figures (using Running Balance)
             const sortedKeys = Object.keys(monthlyAggregates).sort();
+            
+            // To calculate cumulative cash correctly for the chart, we need to know the opening balance.
+            const initialBalance = transactions[0].runningBalance - transactions[0].amount;
+            let currentCumulative = initialBalance;
+
             const processedData = sortedKeys.map(key => {
                 const item = monthlyAggregates[key];
                 const netCashFlow = item.inflows - item.outflows;
-                cumulativeCash += netCashFlow;
+                currentCumulative += netCashFlow;
                 
                 return {
                     date: new Date(item.date).toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }),
                     inflows: item.inflows,
                     outflows: item.outflows,
                     netCashFlow: netCashFlow,
-                    cumulativeCash: cumulativeCash
+                    cumulativeCash: currentCumulative
                 };
             });
 
-            // 3. Calculate KPIs based on the final month's data
-            const latestData = processedData[processedData.length - 1] || { cumulativeCash: 0, netCashFlow: 0 };
-
-            // Calculate Cash Runway based on the last 3 months average cash flow
-            const lookback = 3;
-            const lastMonths = processedData.slice(-lookback);
-            const sumNetFlow = lastMonths.reduce((sum, item) => sum + item.netCashFlow, 0);
-            const avgNetFlow = sumNetFlow / lookback;
-            
-            let runway = 'Infinite (Positive)';
-            if (latestData.cumulativeCash > 0) {
-                 if (avgNetFlow < 0) {
-                    const months = Math.abs(latestData.cumulativeCash / avgNetFlow);
-                    runway = `${Math.floor(months)} Months`;
-                    if (months < 1) {
-                        runway = `${Math.floor(months * 30)} Days`;
-                    }
-                }
-            } else {
-                runway = 'CRITICAL (0 Days)';
-            }
-            
-            // Mock DSO calculation (since transaction list doesn't contain AR aging)
-            const latestDSO = dsoCount > 0 ? Math.round(dsoCount / dsoInflows) : 35; // Default mock 35 days
+            // 3. Calculate KPIs
+            const latestData = processedData[processedData.length - 1] || { netCashFlow: 0 };
+            const numMonths = processedData.length;
 
             return {
                 processedData,
                 latest: latestData,
-                totalBalance: latestData.cumulativeCash,
+                totalBalance: transactions[transactions.length - 1].runningBalance, // Use last running balance
                 netOCF: latestData.netCashFlow,
-                runway: runway,
-                avgDSO: latestDSO
+                avgInflow: numMonths > 0 ? totalInflows / numMonths : 0,
+                avgOutflow: numMonths > 0 ? totalOutflows / numMonths : 0,
             };
         };
 
@@ -312,7 +284,7 @@
             }
 
             const headers = lines[0].split(',').map(h => h.trim());
-            const expectedHeaders = ['Date', 'Description', 'Category', 'Amount'];
+            const expectedHeaders = ['Date', 'Description', 'Category', 'Amount', 'Running Balance'];
             
             if (headers.length !== expectedHeaders.length || headers.some((h, i) => h !== expectedHeaders[i])) {
                 return { success: false, message: `Invalid CSV format. Expected headers: ${expectedHeaders.join(', ')}` };
@@ -322,9 +294,11 @@
                 const values = lines[i].split(',').map(v => v.trim());
                 if (values.length === headers.length) {
                     const amount = parseFloat(values[3]);
+                    const runningBalance = parseFloat(values[4]);
                     const date = values[0];
-                    if (isNaN(amount) || isNaN(new Date(date))) {
-                        return { success: false, message: `Error on line ${i + 1}: Invalid Date or Amount value.` };
+
+                    if (isNaN(amount) || isNaN(runningBalance) || isNaN(new Date(date))) {
+                        return { success: false, message: `Error on line ${i + 1}: Invalid Date, Amount, or Running Balance value.` };
                     }
                     
                     transactions.push({
@@ -332,7 +306,9 @@
                         description: values[1],
                         category: values[2],
                         amount: amount,
-                        isDSO: values[2] === 'Sales' || values[2] === 'Operating' && amount > 0, // Flag potential DSO items
+                        runningBalance: runningBalance,
+                        // Flag potential Operating Inflow items for Net OCF calculation
+                        isOperatingInflow: values[2] === 'Sales' || values[2] === 'Operating' && amount > 0, 
                     });
                 }
             }
@@ -344,7 +320,7 @@
         // --- RENDER FUNCTIONS ---
 
         const updateKPIs = (metrics) => {
-            const { totalBalance, netOCF, runway, avgDSO } = metrics;
+            const { totalBalance, netOCF, avgInflow, avgOutflow } = metrics;
 
             document.getElementById('kpi-balance').textContent = formatCurrency(totalBalance);
 
@@ -366,30 +342,18 @@
                 ocfChangeElement.classList.add('text-danger-red');
             }
 
-            // Runway coloring
-            const runwayElement = document.getElementById('kpi-runway');
-            runwayElement.textContent = runway;
-            runwayElement.classList.remove('text-safe-green', 'text-danger-red', 'text-yellow-500');
-            if (runway.includes('Infinite')) {
-                runwayElement.classList.add('text-safe-green');
-            } else if (runway.includes('CRITICAL') || (parseInt(runway) < 3 && !isNaN(parseInt(runway)))) {
-                runwayElement.classList.add('text-danger-red');
-            } else {
-                runwayElement.classList.add('text-yellow-500');
-            }
+            // Average Monthly Inflow (KPI 3)
+            const inflowElement = document.getElementById('kpi-avg-inflow');
+            inflowElement.textContent = formatCurrency(avgInflow);
+            inflowElement.classList.remove('text-safe-green', 'text-danger-red', 'text-yellow-500');
+            inflowElement.classList.add('text-secondary-blue');
 
-            // DSO coloring (UK best practice is often < 30 days)
-            const dsoElement = document.getElementById('kpi-dso');
-            dsoElement.textContent = `${avgDSO} Days`;
-            dsoElement.classList.remove('text-safe-green', 'text-danger-red', 'text-yellow-500');
+            // Average Monthly Spend (KPI 4)
+            const spendElement = document.getElementById('kpi-avg-spend');
+            spendElement.textContent = formatCurrency(avgOutflow);
+            spendElement.classList.remove('text-safe-green', 'text-danger-red', 'text-yellow-500');
+            spendElement.classList.add('text-flow-out');
 
-            if (avgDSO <= 30) {
-                dsoElement.classList.add('text-safe-green');
-            } else if (avgDSO > 45) {
-                dsoElement.classList.add('text-danger-red');
-            } else {
-                dsoElement.classList.add('text-yellow-500');
-            }
         };
 
         const renderCharts = (data) => {
@@ -480,17 +444,19 @@
             const list = document.getElementById('transaction-list');
             list.innerHTML = '';
             
-            // Filter to show only the latest 5 transactions
-            const recentTransactions = transactions.slice(-5).reverse();
+            // Sort by the absolute value of amount (magnitude) descending
+            const topTransactions = [...transactions]
+                .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+                .slice(0, 7); // Take the top 7
 
-            if (recentTransactions.length === 0) {
+            if (topTransactions.length === 0) {
                  const row = document.createElement('tr');
-                 row.innerHTML = `<td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No recent transactions found.</td>`;
+                 row.innerHTML = `<td colspan="4" class="px-6 py-4 text-center text-sm text-gray-500">No transactions found to display.</td>`;
                  list.appendChild(row);
                  return;
             }
 
-            recentTransactions.forEach(tx => {
+            topTransactions.forEach(tx => {
                 const isDebit = tx.amount < 0;
                 const amountClass = isDebit ? 'text-flow-out' : 'text-flow-in';
                 const formattedAmount = formatCurrency(tx.amount);
@@ -532,6 +498,7 @@
                     initializeDashboard(currentTransactions);
                     updateStatus(parseResult.message, false);
                 } else {
+                    initializeDashboard([]); // Clear dashboard on error
                     updateStatus(`Error: ${parseResult.message}`, true);
                 }
             };
@@ -543,8 +510,10 @@
 
         const initializeDashboard = (transactions) => {
             if (transactions.length === 0) {
-                 updateStatus("Dashboard requires data. Please upload a valid CSV file.", true);
-                 // Reset KPIs and Charts if no data
+                 // Clear previous data if no transactions loaded
+                 updateKPIs({ totalBalance: 0, netOCF: 0, avgInflow: 0, avgOutflow: 0 });
+                 renderCharts([]);
+                 renderTransactions([]);
                  return;
             }
             
@@ -567,13 +536,17 @@
         const refreshData = () => {
             console.log('Simulating fetching live data...');
 
+            // Calculate the running balance for the new transaction
+            const lastBalance = currentTransactions.length > 0 ? currentTransactions[currentTransactions.length - 1].runningBalance : 0;
+            const newAmount = -(1000 * Math.random());
+            
             // Simulate a new transaction
             const newTransaction = {
                 date: new Date().toISOString().slice(0, 10),
-                description: 'Utility Bill (Simulated)',
+                description: 'Server Maintenance (Simulated)',
                 category: 'Operating',
-                amount: -(1000 * Math.random()),
-                isDSO: false
+                amount: newAmount,
+                runningBalance: lastBalance + newAmount
             };
             
             // Add new transaction to the current data set
